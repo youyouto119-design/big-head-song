@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>实时金融价格滚动插件</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .ticker-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        
+        input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            padding: 12px 30px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        .stock-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .stock-item {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #667eea;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .stock-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .stock-info {
+            flex: 1;
+        }
+        
+        .stock-symbol {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .stock-name {
+            font-size: 14px;
+            color: #999;
+        }
+        
+        .stock-price {
+            text-align: right;
+        }
+        
+        .price {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .change {
+            font-size: 16px;
+            font-weight: bold;
+        }
+        
+        .up {
+            color: #10b981;
+        }
+        
+        .down {
+            color: #ef4444;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #999;
+            padding: 20px;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #c33;
+        }
+        
+        .remove-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+            font-size: 12px;
+        }
+        
+        .remove-btn:hover {
+            background: #dc2626;
+        }
+    </style>
+</head>
+<body>
+    <div class="ticker-container">
+        <h1>📈 实时金融价格</h1>
+        
+        <div class="search-box">
+            <input 
+                type="text" 
+                id="symbolInput" 
+                placeholder="输入股票代码 (如: AAPL, GOOGL, MSFT)"
+                autocomplete="off"
+            >
+            <button onclick="addStock()">添加</button>
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="stockList" class="stock-list">
+            <div class="loading">输入股票代码开始查询...</div>
+        </div>
+    </div>
+
+    <script>
+        let stocks = ['AAPL', 'GOOGL', 'MSFT']; // 默认股票列表
+        let stockData = {};
+
+        // 获取股票数据（使用免费API）
+        async function fetchStockPrice(symbol) {
+            try {
+                // 使用 IEX Cloud 免费层
+                const url = `https://cloud.iexapis.com/stable/quote/${symbol}?token=pk_test123456789`;
+                
+                // 备用：使用 Alpha Vantage API
+                // const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=demo`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                return data;
+            } catch (error) {
+                console.error('获取数据失败:', error);
+                showError('获取股票数据失败，请检查网络连接');
+                return null;
+            }
+        }
+
+        // 使用模拟数据（演示用）
+        function getMockStockData(symbol) {
+            const mockData = {
+                'AAPL': { symbol: 'AAPL', latestPrice: 195.5, change: 2.5, companyName: 'Apple Inc.' },
+                'GOOGL': { symbol: 'GOOGL', latestPrice: 140.3, change: -1.2, companyName: 'Alphabet Inc.' },
+                'MSFT': { symbol: 'MSFT', latestPrice: 380.5, change: 5.3, companyName: 'Microsoft Corp.' },
+                'TESLA': { symbol: 'TSLA', latestPrice: 250.8, change: -3.5, companyName: 'Tesla Inc.' },
+                'META': { symbol: 'META', latestPrice: 320.2, change: 8.5, companyName: 'Meta Platforms Inc.' }
+            };
+            
+            return mockData[symbol] || null;
+        }
+
+        // 更新显示
+        function updateDisplay() {
+            const stockList = document.getElementById('stockList');
+            
+            if (stocks.length === 0) {
+                stockList.innerHTML = '<div class="loading">输入股票代码开始查询...</div>';
+                return;
+            }
+            
+            let html = '';
+            stocks.forEach(symbol => {
+                const data = stockData[symbol] || getMockStockData(symbol);
+                
+                if (data) {
+                    const price = data.latestPrice || data.price || 0;
+                    const change = data.change || 0;
+                    const changePercent = data.changePercent || 0;
+                    const name = data.companyName || '未知公司';
+                    
+                    const isUp = change >= 0;
+                    const changeClass = isUp ? 'up' : 'down';
+                    const arrow = isUp ? '▲' : '▼';
+                    
+                    html += `
+                        <div class="stock-item">
+                            <div class="stock-info">
+                                <div class="stock-symbol">${symbol}</div>
+                                <div class="stock-name">${name}</div>
+                            </div>
+                            <div class="stock-price">
+                                <div class="price">$${price.toFixed(2)}</div>
+                                <div class="change ${changeClass}">
+                                    ${arrow} ${Math.abs(change).toFixed(2)} (${((changePercent * 100).toFixed(2))}%)
+                                </div>
+                            </div>
+                            <button class="remove-btn" onclick="removeStock('${symbol}')">移除</button>
+                        </div>
+                    `;
+                }
+            });
+            
+            stockList.innerHTML = html;
+        }
+
+        // 添加股票
+        function addStock() {
+            const input = document.getElementById('symbolInput');
+            const symbol = input.value.toUpperCase().trim();
+            
+            if (!symbol) {
+                showError('请输入有效的股票代码');
+                return;
+            }
+            
+            if (stocks.includes(symbol)) {
+                showError(`${symbol} 已在列表中`);
+                return;
+            }
+            
+            stocks.push(symbol);
+            input.value = '';
+            hideError();
+            updateDisplay();
+            
+            // 实际应用中，这里获取真实数据
+            // fetchStockPrice(symbol).then(data => {
+            //     stockData[symbol] = data;
+            //     updateDisplay();
+            // });
+        }
+
+        // 删除股票
+        function removeStock(symbol) {
+            stocks = stocks.filter(s => s !== symbol);
+            delete stockData[symbol];
+            updateDisplay();
+        }
+
+        // 显示错误
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        // 隐藏错误
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+
+        // 回车添加
+        document.getElementById('symbolInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addStock();
+            }
+        });
+
+        // 初始化
+        updateDisplay();
+        
+        // 定时刷新（每30秒）
+        setInterval(() => {
+            stocks.forEach(symbol => {
+                // 模拟价格变化
+                if (stockData[symbol]) {
+                    stockData[symbol].change += (Math.random() - 0.5) * 5;
+                }
+            });
+            updateDisplay();
+        }, 30000);
+    </script>
+</body>
+</html>
